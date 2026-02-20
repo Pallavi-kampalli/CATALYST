@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import TrendChart from '../components/TrendChart';
-import RiskBadge from '../components/RiskBadge';
+import { useNotifications } from '../context/NotificationContext';
 
 // Simulated lab test requests
 const LAB_REQUESTS = [
@@ -15,9 +14,9 @@ const LAB_REQUESTS = [
 ];
 
 const STATUS_CONFIG = {
-    pending: { label: 'Pending', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: '⏳' },
-    'in-progress': { label: 'In Progress', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', icon: '🔬' },
-    completed: { label: 'Completed', color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: '✅' },
+    pending: { label: 'Pending', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: '' },
+    'in-progress': { label: 'In Progress', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', icon: '' },
+    completed: { label: 'Completed', color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: '' },
 };
 const URGENCY_CONFIG = {
     high: { label: 'Urgent', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
@@ -27,10 +26,15 @@ const URGENCY_CONFIG = {
 
 export default function LabDashboard() {
     const { user, logout } = useAuth();
+    const { addNotification, getNotifications, getUnreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [requests, setRequests] = useState(LAB_REQUESTS);
     const [filter, setFilter] = useState('all');
     const [uploading, setUploading] = useState(null);
     const [uploaded, setUploaded] = useState(new Set());
+    const [view, setView] = useState('requests'); // 'requests' | 'notifications'
+
+    const labNotifs = getNotifications('lab');
+    const unreadCount = getUnreadCount('lab');
 
     const filtered = filter === 'all'
         ? requests
@@ -43,173 +47,238 @@ export default function LabDashboard() {
     const handleUpload = async (id) => {
         setUploading(id);
         await new Promise((r) => setTimeout(r, 1200));
+
+        const req = requests.find(r => r.id === id);
+
         setRequests((prev) =>
             prev.map((r) => (r.id === id ? { ...r, status: 'completed' } : r))
         );
         setUploaded((prev) => new Set([...prev, id]));
         setUploading(null);
+
+        // Notify Doctor
+        addNotification({
+            targetUserRole: 'doctor', 
+            type: 'Lab Report Uploaded', 
+            message: \Lab uploaded results for \ (\).\,
+            sender: 'Lab System'
+        });
+        
+        // Notify Nurse
+        addNotification({
+            targetUserRole: 'nurse', 
+            type: 'Lab Report Uploaded', 
+            message: \Lab uploaded results for \ (\).\,
+            sender: 'Lab System'
+        });
+
+        // Notify Patient
+        addNotification({
+            targetUserRole: 'patient', 
+            type: 'New Lab Report', 
+            message: \Your lab results for \ are now available.\,
+            sender: 'Lab System'
+        });
     };
 
     return (
-        <div className="lab-dashboard">
-            {/* Header */}
-            <header className="lab-header">
-                <div className="header-logo">
-                    <span className="logo-icon">🩺</span>
-                    <div>
-                        <span className="logo-text">Recovery<span className="logo-accent">Companion</span></span>
-                        <span className="lab-header-badge">Lab Portal</span>
-                    </div>
-                </div>
-                <div className="lab-header-right">
-                    <div className="lab-user-info">
-                        <span className="lab-user-icon">🔬</span>
-                        <div>
-                            <div className="lab-user-name">{user?.name}</div>
-                            <div className="lab-user-role">Lab Practitioner</div>
-                        </div>
-                    </div>
-                    <button className="logout-btn" onClick={logout}>
-                        ← Logout
+        <div className="dashboard doctor-dash">
+            {/* Sidebar */}
+            <aside className="doctor-sidebar">
+                <div className="doctor-sidebar-logo"></div>
+                <nav className="doctor-sidebar-nav">
+                    <button className={\doctor-nav-icon-btn \\} onClick={() => setView('requests')} title="Test Requests">
+                        
+                        <span className="doctor-nav-tooltip">Requests</span>
                     </button>
-                </div>
-            </header>
+                    <button className={\doctor-nav-icon-btn \\} onClick={() => setView('notifications')} title="Notifications" style={{ position: 'relative' }}>
+                        
+                        {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
+                        <span className="doctor-nav-tooltip">Notifications</span>
+                    </button>
+                </nav>
+                <button className="doctor-sidebar-logout" onClick={logout} title="Logout">
+                    
+                    <span className="doctor-nav-tooltip">Logout</span>
+                </button>
+            </aside>
 
-            {/* Summary Stats */}
-            <div className="lab-stats">
-                <div className="lab-stat-card lab-stat-card--pending">
-                    <span className="lab-stat-icon">⏳</span>
-                    <div className="lab-stat-value">{pending}</div>
-                    <div className="lab-stat-label">Pending</div>
-                </div>
-                <div className="lab-stat-card lab-stat-card--inprog">
-                    <span className="lab-stat-icon">🔬</span>
-                    <div className="lab-stat-value">{inProg}</div>
-                    <div className="lab-stat-label">In Progress</div>
-                </div>
-                <div className="lab-stat-card lab-stat-card--done">
-                    <span className="lab-stat-icon">✅</span>
-                    <div className="lab-stat-value">{completed}</div>
-                    <div className="lab-stat-label">Completed</div>
-                </div>
-                <div className="lab-stat-card lab-stat-card--total">
-                    <span className="lab-stat-icon">📋</span>
-                    <div className="lab-stat-value">{requests.length}</div>
-                    <div className="lab-stat-label">Total Requests</div>
-                </div>
-            </div>
-
-            {/* Main content */}
-            <div className="lab-content">
-                <div className="lab-panel">
-                    {/* Panel header */}
-                    <div className="lab-panel-header">
-                        <h2 className="lab-panel-title">Test Requests</h2>
-                        <div className="lab-filter-tabs">
-                            {['all', 'pending', 'in-progress', 'completed'].map((f) => (
-                                <button
-                                    key={f}
-                                    className={`lab-filter-btn ${filter === f ? 'lab-filter-btn--active' : ''}`}
-                                    onClick={() => setFilter(f)}
-                                >
-                                    {f === 'all' ? 'All' : f === 'in-progress' ? 'In Progress'
-                                        : f.charAt(0).toUpperCase() + f.slice(1)}
-                                </button>
-                            ))}
-                        </div>
+            {/* Main Area */}
+            <main className="doctor-main">
+                <div className="dash-topbar">
+                    <div>
+                        <h1 className="dash-title">{view === 'requests' ? 'Lab Portal' : 'Notifications'}</h1>
+                        <p className="dash-subtitle">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </div>
+                    <div className="dash-topbar-right">
+                        <span className="dash-role-badge dash-role-badge--intern"> Lab Practitioner</span>
+                        <span className="dash-user">{user?.name || 'Lab Tech'}</span>
+                        <span className="dash-avatar"></span>
+                    </div>
+                </div>
 
-                    {/* Request list */}
-                    <div className="lab-request-list">
-                        {filtered.map((req) => {
-                            const sc = STATUS_CONFIG[req.status];
-                            const uc = URGENCY_CONFIG[req.urgency];
-                            const isUploading = uploading === req.id;
-                            const isDone = req.status === 'completed';
-                            return (
-                                <div key={req.id} className={`lab-request-card lab-request-card--${req.urgency}`}>
-                                    <div className="lab-request-top">
-                                        <div className="lab-request-patient">
-                                            <span className="lab-patient-icon">🧑‍⚕️</span>
-                                            <div>
-                                                <div className="lab-patient-name">{req.patient}</div>
-                                                <div className="lab-patient-meta">Requested by {req.doctor} · {req.requested}</div>
-                                            </div>
-                                        </div>
-                                        <div className="lab-request-badges">
-                                            <span className="lab-badge" style={{ color: uc.color, background: uc.bg }}>
-                                                {uc.label}
-                                            </span>
-                                            <span className="lab-badge" style={{ color: sc.color, background: sc.bg }}>
-                                                {sc.icon} {sc.label}
-                                            </span>
-                                        </div>
+                <div className="doctor-content-container">
+                    {view === 'requests' ? (
+                        <div className="doctor-home-content" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                            {/* Summary Stats */}
+                            <div className="team-overview-grid">
+                                <div className="stat-card">
+                                    <div className="stat-card-top">
+                                        <span className="stat-icon stat-icon--high"></span>
+                                        <span className="stat-label">Pending</span>
                                     </div>
-
-                                    <div className="lab-test-name">
-                                        <span className="lab-test-icon">🧪</span>
-                                        {req.test}
+                                    <div className="stat-value">{pending}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-card-top">
+                                        <span className="stat-icon stat-icon--moderate"></span>
+                                        <span className="stat-label">In Progress</span>
                                     </div>
+                                    <div className="stat-value">{inProg}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-card-top">
+                                        <span className="stat-icon stat-icon--stable"></span>
+                                        <span className="stat-label">Completed</span>
+                                    </div>
+                                    <div className="stat-value">{completed}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-card-top">
+                                        <span className="stat-icon stat-icon--total"></span>
+                                        <span className="stat-label">Total Requests</span>
+                                    </div>
+                                    <div className="stat-value">{requests.length}</div>
+                                </div>
+                            </div>
 
-                                    {!isDone && (
-                                        <div className="lab-request-actions">
-                                            <button
-                                                className="lab-upload-btn"
-                                                onClick={() => handleUpload(req.id)}
-                                                disabled={isUploading}
-                                            >
-                                                {isUploading ? '⏳ Uploading results…' : '📤 Upload Results'}
-                                            </button>
-                                            {req.status === 'pending' && (
+                            {/* Content Split */}
+                            <div className="dash-split" style={{ gridTemplateColumns: '1fr', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                <section className="risk-section">
+                                    <div className="risk-section-header" style={{ justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span className="risk-section-dot risk-section-dot--moderate" />
+                                            <h2 className="risk-section-title">Test Requests <span className="risk-section-count">({filtered.length})</span></h2>
+                                        </div>
+                                        <div className="lab-filter-tabs">
+                                            {['all', 'pending', 'in-progress', 'completed'].map((f) => (
                                                 <button
-                                                    className="lab-start-btn"
-                                                    onClick={() =>
-                                                        setRequests((prev) =>
-                                                            prev.map((r) => (r.id === req.id ? { ...r, status: 'in-progress' } : r))
-                                                        )
-                                                    }
+                                                    key={f}
+                                                    className={\lab-filter-btn \\}
+                                                    onClick={() => setFilter(f)}
                                                 >
-                                                    ▶ Start Processing
+                                                    {f === 'all' ? 'All' : f === 'in-progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
                                                 </button>
-                                            )}
+                                            ))}
                                         </div>
-                                    )}
+                                    </div>
 
-                                    {isDone && (
-                                        <div className="lab-done-note">
-                                            ✅ Results submitted · {uploaded.has(req.id) ? 'Just now' : req.requested}
-                                        </div>
+                                    <div className="lab-request-grid">
+                                        {filtered.map((req) => {
+                                            const sc = STATUS_CONFIG[req.status];
+                                            const uc = URGENCY_CONFIG[req.urgency];
+                                            const isUploading = uploading === req.id;
+                                            const isDone = req.status === 'completed';
+                                            return (
+                                                <div key={req.id} className="lab-request-card">
+                                                    <div className="lab-request-top">
+                                                        <div className="lab-request-patient-info">
+                                                            <div className="lab-request-patient-name">{req.patient}</div>
+                                                            <div className="lab-request-meta">Requested by {req.doctor}  {req.requested}</div>
+                                                        </div>
+                                                        <span className="pcase-risk-badge" style={{ color: sc.color, background: sc.bg }}>{sc.icon} {sc.label}</span>
+                                                    </div>
+
+                                                    <div className="lab-request-middle">
+                                                        <div className="lab-test-type">
+                                                            <span className="lab-test-icon"></span>
+                                                            <span className="lab-test-name">{req.test}</span>
+                                                        </div>
+                                                        <span className="pcase-risk-badge" style={{ color: uc.color, background: uc.bg, fontSize: '12px' }}>{uc.label}</span>
+                                                    </div>
+
+                                                    <div className="lab-request-footer">
+                                                        {!isDone && (
+                                                            <div className="lab-actions">
+                                                                {req.status === 'pending' && (
+                                                                    <button
+                                                                        className="lab-action-btn lab-action-btn--secondary"
+                                                                        onClick={() =>
+                                                                            setRequests((prev) =>
+                                                                                prev.map((r) => (r.id === req.id ? { ...r, status: 'in-progress' } : r))
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                         Start
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    className="lab-action-btn lab-action-btn--primary"
+                                                                    onClick={() => handleUpload(req.id)}
+                                                                    disabled={isUploading}
+                                                                >
+                                                                    {isUploading ? ' Uploading' : ' Upload Results'}
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        {isDone && (
+                                                            <div className="lab-done-note">
+                                                                 Results submitted  {uploaded.has(req.id) ? 'Just now' : req.requested}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="doctor-home-content">
+                            <section className="risk-section">
+                                <div className="risk-section-header" style={{ justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <span className="risk-section-dot risk-section-dot--stable" />
+                                        <h2 className="risk-section-title">Notifications</h2>
+                                    </div>
+                                    {unreadCount > 0 && (
+                                        <button className="lab-filter-btn" onClick={() => markAllAsRead('lab')}>
+                                            Mark All as Read
+                                        </button>
                                     )}
                                 </div>
-                            );
-                        })}
-                    </div>
-                </div>
 
-                {/* Info panel */}
-                <div className="lab-info-panel">
-                    <div className="lab-info-card">
-                        <h3 className="lab-info-title">🔒 Access Scope</h3>
-                        <ul className="lab-info-list">
-                            <li>✅ View test requests assigned to lab</li>
-                            <li>✅ Upload and submit lab results</li>
-                            <li>✅ Mark requests as in-progress</li>
-                            <li>🚫 Symptom logs (restricted)</li>
-                            <li>🚫 Risk scores (restricted)</li>
-                            <li>🚫 Clinical dashboard (restricted)</li>
-                        </ul>
-                    </div>
-                    <div className="lab-info-card">
-                        <h3 className="lab-info-title">📊 Today's Summary</h3>
-                        <div className="lab-summary-items">
-                            <div className="lab-summary-row"><span>Urgent pending</span><span className="lab-sum-val red">{requests.filter(r => r.urgency === 'high' && r.status === 'pending').length}</span></div>
-                            <div className="lab-summary-row"><span>Awaiting doctor review</span><span className="lab-sum-val yellow">{completed}</span></div>
-                            <div className="lab-summary-row"><span>Your shift starts</span><span className="lab-sum-val">08:00 AM</span></div>
-                            <div className="lab-summary-row"><span>Turnaround target</span><span className="lab-sum-val">4 hrs</span></div>
+                                {labNotifs.length === 0 ? (
+                                    <div className="lab-empty-state">
+                                        No notifications yet.
+                                    </div>
+                                ) : (
+                                    <div className="lab-notification-list">
+                                        {labNotifs.map(n => (
+                                            <div key={n.id} className="lab-notification-item" style={{ opacity: n.read ? 0.7 : 1 }}>
+                                                <div className="lab-notification-content">
+                                                    <div className="lab-notification-icon"></div>
+                                                    <div>
+                                                        <div className="lab-notification-title">{n.type} <span className="lab-notification-sender">from {n.sender}</span></div>
+                                                        <div className="lab-notification-message">{n.message}</div>
+                                                        <div className="lab-notification-time">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </div>
+                                                </div>
+                                                {!n.read && (
+                                                    <button className="lab-action-btn lab-action-btn--secondary" onClick={() => markAsRead(n.id)}>
+                                                        Mark Read
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </section>
                         </div>
-                    </div>
+                    )}
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
