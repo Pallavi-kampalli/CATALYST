@@ -29,7 +29,7 @@ export default function App() {
 
           {/* Patient app — patients only */}
           <Route
-            path="/"
+            path="/patient-dashboard"
             element={
               <ProtectedRoute allowedRoles={['patient']}>
                 <PatientProvider>
@@ -39,9 +39,9 @@ export default function App() {
             }
           />
 
-          {/* Clinician dashboard — doctor only */}
+          {/* Doctor dashboard */}
           <Route
-            path="/dashboard"
+            path="/doctor-dashboard"
             element={
               <ProtectedRoute allowedRoles={['doctor']}>
                 <Dashboard />
