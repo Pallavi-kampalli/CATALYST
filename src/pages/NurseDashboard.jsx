@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { engineerFeatures } from '../ml/features';
 import { predictSync } from '../ml/model';
 
@@ -165,6 +166,7 @@ const ALL_PATIENTS = buildPatients();
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function NurseDashboard() {
     const { user, logout } = useAuth();
+    const { addNotification } = useNotifications();
     const isIntern = user?.role === 'intern';
     const [activePage, setActivePage] = useState('patients');
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -194,10 +196,26 @@ export default function NurseDashboard() {
     };
 
     const scheduleAppointment = (patientId, appt) => {
+        const patientName = ALL_PATIENTS.find(p => p.id === patientId)?.name || 'Patient';
+
         setScheduledAppts(prev => ({
             ...prev,
             [patientId]: [...(prev[patientId] || []), { ...appt, status: 'Pending Approval', scheduledBy: user?.name }]
         }));
+
+        // Notify Doctor and Patient
+        addNotification({
+            targetUserRole: 'doctor',
+            type: 'Appointment Request',
+            message: `${user?.name} scheduled an appointment for ${patientName} on ${appt.date} at ${appt.time} for "${appt.reason}".`,
+            sender: user?.name
+        });
+        addNotification({
+            targetUserRole: 'patient',
+            type: 'Appointment Scheduled',
+            message: `${user?.name} requested an appointment for you on ${appt.date} at ${appt.time}.`,
+            sender: user?.name
+        });
     };
 
     const detailProps = { notesState, addNote, messagesState, sendMessage, scheduledAppts, scheduleAppointment };
@@ -206,11 +224,12 @@ export default function NurseDashboard() {
         <div className="dashboard nurse-dash">
             {/* Sidebar */}
             <aside className="doctor-sidebar">
-                <div className="doctor-sidebar-logo">{isIntern ? '🩻' : '💉'}</div>
+                <div className="doctor-sidebar-logo">{isIntern ? '🩺' : '💉'}</div>
                 <nav className="doctor-sidebar-nav">
                     {[
                         { id: 'patients', icon: '🏠', label: 'My Patients' },
                         { id: 'reports', icon: '📋', label: 'Reports' },
+                        { id: 'queries', icon: '🔔', label: 'Interaction & Queries' },
                     ].map(item => (
                         <button key={item.id}
                             className={`doctor-nav-icon-btn${activePage === item.id ? ' doctor-nav-icon-btn--active' : ''}`}
@@ -241,7 +260,7 @@ export default function NurseDashboard() {
                             <button className="nd-back-btn" onClick={() => setSelectedPatient(null)}>← Back</button>
                         )}
                         <span className={`dash-role-badge dash-role-badge--${isIntern ? 'intern' : 'nurse'}`}>
-                            {isIntern ? '🩻 Intern' : '💉 Nurse'}
+                            {isIntern ? '🩺 Intern' : '💉 Nurse'}
                         </span>
                         <span className="dash-user">{user?.name || 'Clinician'}</span>
                         <span className="dash-avatar">{isIntern ? '👨‍⚕️' : '👩‍⚕️'}</span>
@@ -273,6 +292,11 @@ export default function NurseDashboard() {
                 {/* Reports Page */}
                 {activePage === 'reports' && (
                     <ReportsPage patients={myPatients} />
+                )}
+
+                {/* Interaction & Queries Page */}
+                {activePage === 'queries' && (
+                    <InteractionsPage patients={myPatients} />
                 )}
             </main>
         </div>
@@ -679,6 +703,81 @@ function ReportsPage({ patients }) {
                 ))}
             </div>
             {patient && <ReportsTab patient={patient} />}
+        </div>
+    );
+}
+
+// ─── Interaction & Queries Page ───────────────────────────────────────────────
+function InteractionsPage({ patients }) {
+    const { addNotification } = useNotifications();
+    const [replyText, setReplyText] = useState('');
+
+    // Mock interaction data
+    const interactions = [
+        { id: 1, type: 'Message', patientName: patients[0]?.name || 'Patient A', text: 'Im feeling a bit dizzy after taking the new medication.', time: '10:30 AM', status: 'Unresolved' },
+        { id: 2, type: 'AI Alert', patientName: patients[1]?.name || 'Patient B', text: 'System flagged elevated temperature trend over last 12 hours.', time: '09:15 AM', status: 'Unresolved' },
+        { id: 3, type: 'Message', patientName: patients[2]?.name || 'Patient C', text: 'Can I shower today?', time: 'Yesterday', status: 'Resolved' }
+    ];
+
+    const handleEscalate = (int) => {
+        addNotification({
+            targetUserRole: 'doctor',
+            type: 'AI Symptom Escalation',
+            message: `Nurse escalated query from ${int.patientName}: "${int.text}"`,
+            sender: 'Nurse'
+        });
+        alert('Escalated to Doctor.');
+    };
+
+    const handleReply = (int) => {
+        if (!replyText.trim()) return;
+        addNotification({
+            targetUserRole: 'patient',
+            type: 'Message',
+            message: `Nurse reply: "${replyText}"`,
+            sender: 'Nurse'
+        });
+        setReplyText('');
+        alert('Reply sent to patient.');
+    };
+
+    return (
+        <div className="doctor-home-content nd-reports-page">
+            <div className="dd-section">
+                <div className="dd-section-header">
+                    <span className="dd-section-icon">🔔</span>
+                    <h3 className="dd-section-title">Patient Messages & AI Alerts</h3>
+                </div>
+                <div className="reports-list">
+                    {interactions.map(int => (
+                        <div key={int.id} className="report-card" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
+                            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }}>
+                                <div style={{ fontWeight: 'bold' }}>{int.patientName} <span className="report-type-badge">{int.type}</span></div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{int.time}</div>
+                            </div>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>"{int.text}"</div>
+
+                            {int.status === 'Unresolved' && (
+                                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
+                                    <input
+                                        type="text"
+                                        className="appt-input"
+                                        style={{ flex: 1 }}
+                                        placeholder="Type reply to patient..."
+                                        value={replyText}
+                                        onChange={e => setReplyText(e.target.value)}
+                                    />
+                                    <button className="med-btn med-btn--save" onClick={() => handleReply(int)}>Reply</button>
+                                    <button className="med-btn med-btn--remove" onClick={() => handleEscalate(int)}>Escalate to Doctor</button>
+                                </div>
+                            )}
+                            {int.status === 'Resolved' && (
+                                <div style={{ fontSize: '11px', color: 'var(--accent-green)', fontWeight: 'bold' }}>✓ Resolved</div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 // ─── Static Patient Data ───────────────────────────────────────────────────────
 const PATIENT_DATA = {
@@ -104,6 +105,9 @@ function getAIResponse(userMsg, history, reportedSymptoms) {
     if (lower.match(/appointment|doctor|schedule/)) {
         return { text: `Your doctor Dr. Sarah Mitchell has been notified. If you need to schedule an appointment urgently, your assigned nurse can arrange that for you.\n\nShall I flag this request to Nurse James Carter?`, escalate: false, detected: [] };
     }
+    if (lower.match(/worse|not improving|more pain|bad|hurts more/)) {
+        return { text: `I'm sorry to hear that you're feeling worse. I have alerted Nurse James Carter and Dr. Mitchell immediately to review your symptoms. Please rest and they will reach out shortly.`, escalate: true, detected: [] };
+    }
 
     return {
         text: `Thank you for sharing that. I've logged your update for Day ${PATIENT_DATA.daysSinceDischarge} of your recovery.\n\nKeep resting and follow your care plan. I'll check in with you tomorrow. Stay strong! 💪`,
@@ -128,6 +132,7 @@ function saveReportedSymptoms(s) {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function PatientApp() {
     const { user, logout } = useAuth();
+    const { addNotification, getNotifications, getUnreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [activePage, setActivePage] = useState('home');
     const [chatHistory, setChatHistory] = useState(() => {
         const stored = loadChatHistory();
@@ -140,6 +145,23 @@ export default function PatientApp() {
         }
         return stored;
     });
+
+    useEffect(() => {
+        const today = new Date().toISOString().split('T')[0];
+        const sentKey = `pd_daily_notif_sent_${today}`;
+        if (!localStorage.getItem(sentKey)) {
+            const timer = setTimeout(() => {
+                addNotification({
+                    targetUserRole: 'patient',
+                    type: 'AI Alert',
+                    message: "Daily Check-in: How are you feeling today? Are your symptoms improving?",
+                    sender: '🤖 AI Assistant'
+                });
+                localStorage.setItem(sentKey, 'true');
+            }, 3000); // 3 seconds after load
+            return () => clearTimeout(timer);
+        }
+    }, [addNotification]);
     const [reportedSymptoms, setReportedSymptoms] = useState(loadReportedSymptoms);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const fileInputRef = useRef();
@@ -180,6 +202,9 @@ export default function PatientApp() {
 
     const allReports = useMemo(() => [...p.reports, ...uploadedFiles], [uploadedFiles]);
 
+    const patientNotifs = getNotifications('patient');
+    const unreadCount = getUnreadCount('patient');
+
     return (
         <div className="dashboard pd-dash">
             {/* Sidebar */}
@@ -189,11 +214,13 @@ export default function PatientApp() {
                     {[
                         { id: 'home', icon: '🏠', label: 'Home' },
                         { id: 'reports', icon: '📁', label: 'Reports' },
+                        { id: 'notifications', icon: '🔔', label: 'Notifications', count: unreadCount },
                     ].map(item => (
                         <button key={item.id}
                             className={`doctor-nav-icon-btn${activePage === item.id ? ' doctor-nav-icon-btn--active' : ''}`}
-                            onClick={() => setActivePage(item.id)} title={item.label}>
+                            onClick={() => setActivePage(item.id)} title={item.label} style={{ position: 'relative' }}>
                             {item.icon}
+                            {item.count > 0 && <span className="nav-badge">{item.count}</span>}
                             <span className="doctor-nav-tooltip">{item.label}</span>
                         </button>
                     ))}
@@ -207,7 +234,11 @@ export default function PatientApp() {
             <main className="doctor-main">
                 <div className="dash-topbar">
                     <div>
-                        <h1 className="dash-title">{activePage === 'home' ? 'My Health Dashboard' : 'My Reports'}</h1>
+                        <h1 className="dash-title">
+                            {activePage === 'home' ? 'My Health Dashboard' :
+                                activePage === 'reports' ? 'My Reports' :
+                                    'Notifications'}
+                        </h1>
                         <p className="dash-subtitle">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </div>
                     <div className="dash-topbar-right">
@@ -224,6 +255,13 @@ export default function PatientApp() {
                 {activePage === 'reports' && (
                     <ReportsPage allReports={allReports} recoveryRate={recoveryRate} sugarColor={sugarColor} bpColor={bpColor}
                         onUploadClick={() => fileInputRef.current?.click()} p={p} />
+                )}
+                {activePage === 'notifications' && (
+                    <NotificationsPage
+                        notifications={patientNotifs}
+                        onMarkRead={markAsRead}
+                        onMarkAllRead={() => markAllAsRead('patient')}
+                    />
                 )}
                 <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx"
                     style={{ display: 'none' }} onChange={handleUpload} />
@@ -500,6 +538,58 @@ function ReportsPage({ allReports, recoveryRate, sugarColor, bpColor, onUploadCl
                         <div className="pd-factor">Symptoms: Monitored</div>
                     </div>
                 </div>
+            </section>
+        </div>
+    );
+}
+
+// ─── Notifications Page ────────────────────────────────────────────────────────
+function NotificationsPage({ notifications, onMarkRead, onMarkAllRead }) {
+    const unreadCount = notifications.filter(n => !n.read).length;
+
+    return (
+        <div className="pd-home-content">
+            <section className="pd-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div className="pd-section-title" style={{ margin: 0 }}>
+                        🔔 All Notifications {unreadCount > 0 && <span className="assign-count-badge">{unreadCount}</span>}
+                    </div>
+                    {unreadCount > 0 && (
+                        <button className="nd-view-detail" onClick={onMarkAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                            Mark all as read
+                        </button>
+                    )}
+                </div>
+
+                {notifications.length === 0 ? (
+                    <div className="pd-upload-zone" style={{ borderStyle: 'solid', borderColor: 'transparent', backgroundColor: 'var(--bg-panel)' }}>
+                        <div className="pd-upload-icon">📭</div>
+                        <div className="pd-upload-text">No notifications yet</div>
+                        <div className="pd-upload-sub">You're all caught up!</div>
+                    </div>
+                ) : (
+                    <div className="pd-report-list">
+                        {notifications.map(n => (
+                            <div key={n.id} className="pd-report-card" style={{ opacity: n.read ? 0.7 : 1, backgroundColor: n.read ? 'var(--bg-surface)' : 'var(--bg-panel)' }}>
+                                <div className="pd-report-icon">{n.type === 'Message' ? '💬' : n.type === 'Doctor Note' ? '📝' : '🔔'}</div>
+                                <div className="pd-report-info" style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div className="pd-report-type" style={{ color: 'var(--text-primary)' }}>{n.type}</div>
+                                        <div className="pd-report-meta" style={{ margin: 0 }}>{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · from {n.sender}</div>
+                                    </div>
+                                    <div className="pd-report-file" style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '14px' }}>
+                                        {n.message}
+                                    </div>
+                                </div>
+                                {!n.read && (
+                                    <button className="pd-upload-btn" onClick={() => onMarkRead(n.id)} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                                        Mark Read
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
         </div>
     );

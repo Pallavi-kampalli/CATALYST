@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { engineerFeatures } from '../ml/features';
 import { predictSync } from '../ml/model';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const noise = () => (Math.random() - 0.5) * 1.5;
@@ -256,9 +257,9 @@ const INITIAL_ASSIGNMENTS = (() => {
     ]));
 })();
 
-// ─── Root Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
     const { user, logout } = useAuth();
+    const { addNotification } = useNotifications();
     const [activePage, setActivePage] = useState('home');
     const [expandedId, setExpandedId] = useState(null);
     const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
@@ -309,6 +310,27 @@ export default function Dashboard() {
 
     const handleEditMed = (patientId, medId, updatedMed) => {
         const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        // Check if a note was added in this edit
+        const oldMed = (medState[patientId] || []).find(m => m.id === medId);
+        if (updatedMed.note && updatedMed.note !== oldMed?.note) {
+            const patientName = ALL_PATIENTS.find(p => p.id === patientId)?.name || 'Patient';
+            const assignedNurse = assignments[patientId]?.nurse;
+            const assignedIntern = assignments[patientId]?.intern;
+
+            // Notify Patient
+            addNotification({
+                targetUserRole: 'patient',
+                type: 'Medication Update',
+                message: `Doctor left a note on ${updatedMed.name}: "${updatedMed.note}"`,
+                sender: 'Doctor'
+            });
+            // Notify Nurse/Intern if assigned
+            const teamMsg = `Doctor left a note on ${patientName}'s med (${updatedMed.name}): "${updatedMed.note}"`;
+            if (assignedNurse) addNotification({ targetUserRole: 'nurse', type: 'Doctor Note', message: teamMsg, sender: 'Doctor' });
+            if (assignedIntern) addNotification({ targetUserRole: 'intern', type: 'Doctor Note', message: teamMsg, sender: 'Doctor' });
+        }
+
         setMedState(prev => ({
             ...prev,
             [patientId]: (prev[patientId] || []).map(m => m.id === medId ? { ...m, ...updatedMed } : m)
@@ -397,82 +419,84 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* HOME PAGE */}
-                {activePage === 'home' && (
-                    <div className="doctor-home-content">
-                        <RiskSection title="Attention Needed" count={high.length} patients={high} accentKey="high"
-                            expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
-                        <RiskSection title="Moderate" count={moderate.length} patients={moderate} accentKey="moderate"
-                            expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
-                        <RiskSection title="Stable" count={stable.length} patients={stable} accentKey="stable"
-                            expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
-                    </div>
-                )}
-
-                {/* ASSIGNED TO PAGE */}
-                {activePage === 'assigned' && (
-                    <div className="doctor-assigned-content">
-                        {/* Stats */}
-                        <div className="team-overview-grid">
-                            <StatCard icon="💉" label="Nurses" value={nurses.length} color="nurse" />
-                            <StatCard icon="🩻" label="Interns" value={interns.length} color="intern" />
-                            <StatCard icon="✅" label="Assigned" value={assigned.length} color="total" />
-                            <StatCard icon="📋" label="Unassigned" value={unassigned.length} color="unassigned" />
+                <div className="doctor-content-container">
+                    {/* HOME PAGE */}
+                    {activePage === 'home' && (
+                        <div className="doctor-home-content">
+                            <RiskSection title="Attention Needed" count={high.length} patients={high} accentKey="high"
+                                expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
+                            <RiskSection title="Moderate" count={moderate.length} patients={moderate} accentKey="moderate"
+                                expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
+                            <RiskSection title="Stable" count={stable.length} patients={stable} accentKey="stable"
+                                expandedId={expandedId} toggleExpand={toggleExpand} detailProps={detailProps} assignments={assignments} />
                         </div>
+                    )}
 
-                        {/* Team Members */}
-                        <section className="assigned-section">
-                            <h2 className="assigned-section-title">Team Members</h2>
-                            <div className="team-member-list">
-                                {TEAM_MEMBERS.map(member => (
-                                    <div key={member.id} className={`team-member-card team-member-card--${member.role}`}>
-                                        <div className="team-member-avatar">{member.role === 'nurse' ? '💉' : '🩻'}</div>
-                                        <div className="team-member-info">
-                                            <div className="team-member-name">{member.name}</div>
-                                            <div className="team-member-role">{member.role.charAt(0).toUpperCase() + member.role.slice(1)}</div>
-                                        </div>
-                                        {member.role === 'intern' && (
-                                            <div className="team-member-cases">
-                                                <span className="team-member-case-count">{internCaseCounts[member.id] || 0}</span>
-                                                <span className="team-member-case-label">Cases</span>
+                    {/* ASSIGNED TO PAGE */}
+                    {activePage === 'assigned' && (
+                        <div className="doctor-assigned-content">
+                            {/* Stats */}
+                            <div className="team-overview-grid">
+                                <StatCard icon="💉" label="Nurses" value={nurses.length} color="nurse" />
+                                <StatCard icon="🩺" label="Interns" value={interns.length} color="intern" />
+                                <StatCard icon="✅" label="Assigned" value={assigned.length} color="total" />
+                                <StatCard icon="📋" label="Unassigned" value={unassigned.length} color="unassigned" />
+                            </div>
+
+                            {/* Team Members */}
+                            <section className="assigned-section">
+                                <h2 className="assigned-section-title">Team Members</h2>
+                                <div className="team-member-list">
+                                    {TEAM_MEMBERS.map(member => (
+                                        <div key={member.id} className={`team-member-card team-member-card--${member.role}`}>
+                                            <div className="team-member-avatar">{member.role === 'nurse' ? '💉' : '🩺'}</div>
+                                            <div className="team-member-info">
+                                                <div className="team-member-name">{member.name}</div>
+                                                <div className="team-member-role">{member.role.charAt(0).toUpperCase() + member.role.slice(1)}</div>
                                             </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </section>
+                                            {member.role === 'intern' && (
+                                                <div className="team-member-cases">
+                                                    <span className="team-member-case-count">{internCaseCounts[member.id] || 0}</span>
+                                                    <span className="team-member-case-label">Cases</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
 
-                        {/* Assigned Cases */}
-                        <section className="assigned-section">
-                            <h2 className="assigned-section-title">✅ Assigned Cases <span className="assign-count-badge">{assigned.length}</span></h2>
-                            <div className="case-assignment-list">
-                                {assigned.map(p => (
-                                    <AssignRow key={p.id} patient={p} assignment={assignments[p.id]}
-                                        pending={pendingAssign[p.id] || {}}
-                                        nurses={nurses} interns={interns}
-                                        onFieldChange={(field, val) => setPendingField(p.id, field, val)}
-                                        onUpdate={() => handleAssignUpdate(p.id)} />
-                                ))}
-                                {assigned.length === 0 && <p className="assign-empty">No assigned cases.</p>}
-                            </div>
-                        </section>
+                            {/* Assigned Cases */}
+                            <section className="assigned-section">
+                                <h2 className="assigned-section-title">✅ Assigned Cases <span className="assign-count-badge">{assigned.length}</span></h2>
+                                <div className="case-assignment-list">
+                                    {assigned.map(p => (
+                                        <AssignRow key={p.id} patient={p} assignment={assignments[p.id]}
+                                            pending={pendingAssign[p.id] || {}}
+                                            nurses={nurses} interns={interns}
+                                            onFieldChange={(field, val) => setPendingField(p.id, field, val)}
+                                            onUpdate={() => handleAssignUpdate(p.id)} />
+                                    ))}
+                                    {assigned.length === 0 && <p className="assign-empty">No assigned cases.</p>}
+                                </div>
+                            </section>
 
-                        {/* Unassigned Cases */}
-                        <section className="assigned-section">
-                            <h2 className="assigned-section-title">📋 Unassigned Cases <span className="assign-count-badge assign-count-badge--warn">{unassigned.length}</span></h2>
-                            <div className="case-assignment-list">
-                                {unassigned.map(p => (
-                                    <AssignRow key={p.id} patient={p} assignment={assignments[p.id]}
-                                        pending={pendingAssign[p.id] || {}}
-                                        nurses={nurses} interns={interns}
-                                        onFieldChange={(field, val) => setPendingField(p.id, field, val)}
-                                        onUpdate={() => handleAssignUpdate(p.id)} />
-                                ))}
-                                {unassigned.length === 0 && <p className="assign-empty">All cases are assigned! 🎉</p>}
-                            </div>
-                        </section>
-                    </div>
-                )}
+                            {/* Unassigned Cases */}
+                            <section className="assigned-section">
+                                <h2 className="assigned-section-title">📋 Unassigned Cases <span className="assign-count-badge assign-count-badge--warn">{unassigned.length}</span></h2>
+                                <div className="case-assignment-list">
+                                    {unassigned.map(p => (
+                                        <AssignRow key={p.id} patient={p} assignment={assignments[p.id]}
+                                            pending={pendingAssign[p.id] || {}}
+                                            nurses={nurses} interns={interns}
+                                            onFieldChange={(field, val) => setPendingField(p.id, field, val)}
+                                            onUpdate={() => handleAssignUpdate(p.id)} />
+                                    ))}
+                                    {unassigned.length === 0 && <p className="assign-empty">All cases are assigned! 🎉</p>}
+                                </div>
+                            </section>
+                        </div>
+                    )}
+                </div>
             </main>
         </div>
     );
@@ -607,6 +631,30 @@ function PatientDetailDrawer({ patient: p, apptState, medState, medUpdatedAt, ha
                         normal="70–120" icon="🩸" />
                     <MetricCard label="Blood Pressure" value={p.bp} color={bpColor}
                         normal="<130/85 mmHg" icon="❤️" />
+                </div>
+            </div>
+
+            {/* ── C.5 Reports Section ── */}
+            <div className="dd-section">
+                <div className="dd-section-header">
+                    <span className="dd-section-icon">📑</span>
+                    <h3 className="dd-section-title">Reports & Documents</h3>
+                </div>
+                <div className="reports-list">
+                    {[
+                        { id: 1, type: 'Lab Report', name: 'Complete Blood Count', date: 'Feb 19', by: 'Lab Tech' },
+                        { id: 2, type: 'Scan', name: 'Post-op X-Ray', date: 'Feb 18', by: 'Radiology' },
+                        { id: 3, type: 'Prescription', name: 'Discharge Meds', date: 'Feb 16', by: 'Dr. Smith' }
+                    ].map(rep => (
+                        <div key={rep.id} className="report-card">
+                            <div className="report-icon">{rep.type === 'Scan' ? '🩻' : '📄'}</div>
+                            <div className="report-info">
+                                <div className="report-name">{rep.name} <span className="report-type-badge">{rep.type}</span></div>
+                                <div className="report-meta">Uploaded {rep.date} by {rep.by}</div>
+                            </div>
+                            <button className="report-view-btn">View</button>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -804,8 +852,11 @@ function MedicationManager({ patientId, meds, onAdd, onEdit, onRemove }) {
                                     onChange={e => setEditForm(f => ({ ...f, dosage: e.target.value }))} />
                                 <input className="med-input" placeholder="Frequency" value={editForm.frequency}
                                     onChange={e => setEditForm(f => ({ ...f, frequency: e.target.value }))} />
+                                <textarea className="med-input" placeholder="Leave Notes (visible to patient & nurses)" value={editForm.note || ''}
+                                    onChange={e => setEditForm(f => ({ ...f, note: e.target.value }))}
+                                    style={{ resize: 'vertical', minHeight: '60px' }} />
                                 <div className="med-edit-actions">
-                                    <button className="med-btn med-btn--save" onClick={commitEdit}>Save</button>
+                                    <button className="med-btn med-btn--save" onClick={commitEdit}>Save & Notify</button>
                                     <button className="med-btn med-btn--cancel" onClick={() => setEditingId(null)}>Cancel</button>
                                 </div>
                             </div>
@@ -814,6 +865,11 @@ function MedicationManager({ patientId, meds, onAdd, onEdit, onRemove }) {
                                 <div className="med-info">
                                     <div className="med-name">💊 {med.name}</div>
                                     <div className="med-sub">{med.dosage} · {med.frequency}</div>
+                                    {med.note && (
+                                        <div className="med-note">
+                                            <strong>Dr Note:</strong> {med.note}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="med-actions">
                                     <button className="med-btn med-btn--edit" onClick={() => startEdit(med)}>Edit</button>
