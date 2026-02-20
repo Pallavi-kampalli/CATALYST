@@ -10,6 +10,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo } from
 const DEMO_USERS = [
     { email: 'doctor@test.com', password: '1234', role: 'doctor', name: 'Dr. Sarah Mitchell' },
     { email: 'nurse@test.com', password: '1234', role: 'nurse', name: 'Nurse James Carter' },
+    { email: 'intern@test.com', password: '1234', role: 'intern', name: 'Intern Riya Mehta' },
     { email: 'patient@test.com', password: '1234', role: 'patient', name: 'Alex Johnson' },
     { email: 'lab@test.com', password: '1234', role: 'lab', name: 'Lab Tech Priya Sharma' },
 ];
@@ -17,7 +18,8 @@ const DEMO_USERS = [
 // ─── Role → Default Route Mapping ────────────────────────────────────────────
 export const ROLE_HOME = {
     doctor: '/dashboard',
-    nurse: '/dashboard',
+    nurse: '/nurse-dashboard',
+    intern: '/nurse-dashboard',
     patient: '/',
     lab: '/lab',
 };
@@ -26,17 +28,23 @@ export const ROLE_HOME = {
 // route access: which roles can visit which route
 const ROUTE_PERMISSIONS = {
     '/': ['patient'],
-    '/dashboard': ['doctor', 'nurse'],
+    '/dashboard': ['doctor'],
+    '/nurse-dashboard': ['nurse', 'intern'],
     '/lab': ['lab'],
 };
 
 // feature-level permissions
 const FEATURE_PERMISSIONS = {
-    viewAllPatients: ['doctor', 'nurse'],
-    viewRiskDrivers: ['doctor', 'nurse'],
+    viewAllPatients: ['doctor'],
+    viewAssignedPatients: ['nurse', 'intern'],
+    viewRiskDrivers: ['doctor', 'nurse', 'intern'],
     markAlertsResolved: ['doctor'],
     accessAnalytics: ['doctor'],
     accessSettings: ['doctor'],
+    editMedications: ['doctor'],
+    addNotes: ['nurse', 'intern'],
+    scheduleAppointments: ['nurse', 'intern'],
+    messagePatient: ['nurse', 'intern'],
     viewLabRequests: ['lab'],
     uploadLabResults: ['lab'],
     logOwnSymptoms: ['patient'],

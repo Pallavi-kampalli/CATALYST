@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import PatientApp from './pages/PatientApp';
 import Dashboard from './pages/Dashboard';
+import NurseDashboard from './pages/NurseDashboard';
 import LabDashboard from './pages/LabDashboard';
 
 /**
@@ -38,12 +39,22 @@ export default function App() {
             }
           />
 
-          {/* Clinician dashboard — doctor + nurse */}
+          {/* Clinician dashboard — doctor only */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['doctor', 'nurse']}>
+              <ProtectedRoute allowedRoles={['doctor']}>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Nurse / Intern dashboard */}
+          <Route
+            path="/nurse-dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['nurse', 'intern']}>
+                <NurseDashboard />
               </ProtectedRoute>
             }
           />
