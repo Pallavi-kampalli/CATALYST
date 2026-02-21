@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { openDB } from 'idb';
 
-const DB_NAME = 'recovery-companion';
+const DB_NAME = 'healtrack';
 const STORE_NAME = 'entries';
 const DB_VERSION = 1;
 

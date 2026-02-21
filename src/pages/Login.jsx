@@ -52,10 +52,20 @@ export default function Login() {
             return;
         }
 
-        // Navigate to the role's home route
+        // Navigate after signup/login
         const from = location.state?.from?.pathname;
-        const dest = from && from !== '/login' ? from : ROLE_HOME[result.user?.role || role] || '/';
-        navigate(dest, { replace: true });
+        if (!isLogin) {
+            // After signup, redirect explicitly per role (patients → onboarding)
+            const r = result.user?.role || role;
+            if (r === 'patient') {
+                navigate('/patient-onboarding', { replace: true });
+            } else {
+                navigate(ROLE_HOME[r] || '/', { replace: true });
+            }
+        } else {
+            const dest = from && from !== '/login' ? from : ROLE_HOME[result.user?.role || role] || '/';
+            navigate(dest, { replace: true });
+        }
     };
 
     return (
@@ -68,7 +78,7 @@ export default function Login() {
                 <div className="login-logo">
                     <span className="login-logo-icon">🩺</span>
                     <div>
-                        <div className="login-logo-text">Recovery<span className="logo-accent">Companion</span></div>
+                        <div className="login-logo-text">Heal<span className="logo-accent">Track</span></div>
                         <div className="login-logo-sub">Secure Clinical Access Portal</div>
                     </div>
                 </div>

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Recovery Companion — Global Design System
+  HealTrack — Global Design System
    Light mode, clean & premium, mobile-first
 ═══════════════════════════════════════════════════════════════ */
 
@@ -228,7 +228,9 @@ body::before {
 .app-content {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: 80px;
+  /* Add consistent left/right padding for a neat appearance
+     without altering layout or colors. Keeps same bottom padding. */
+  padding: 0 16px 80px;
   scrollbar-width: none;
 }
 

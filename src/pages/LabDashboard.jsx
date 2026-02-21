@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
+import { db } from '../firebase';
+import { collection, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { labService } from '../services/labService';
 
 // Simulated lab test requests
 const LAB_REQUESTS = [
@@ -44,41 +47,44 @@ export default function LabDashboard() {
     const inProg = requests.filter((r) => r.status === 'in-progress').length;
     const completed = requests.filter((r) => r.status === 'completed').length;
 
+    useEffect(() => {
+        const col = collection(db, 'labRequests');
+        const unsub = onSnapshot(col, (snap) => {
+            const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setRequests(arr);
+        }, (err) => console.error('LabRequests snapshot error', err));
+        return () => unsub();
+    }, []);
+
     const handleUpload = async (id) => {
         setUploading(id);
-        await new Promise((r) => setTimeout(r, 1200));
+        // Mark request completed in Firestore
+        try {
+            await labService.updateRequestStatus(id, 'completed');
+            const req = requests.find(r => r.id === id);
+            // Add lab report entry to patient document if patientId present
+            if (req?.patientId) {
+                const pRef = doc(db, 'patients', req.patientId);
+                await updateDoc(pRef, {
+                    labReports: arrayUnion({
+                        test: req.test,
+                        uploadedAt: new Date().toISOString(),
+                        uploadedBy: user?.uid || 'lab'
+                    })
+                });
+            }
 
-        const req = requests.find(r => r.id === id);
-
-        setRequests((prev) =>
-            prev.map((r) => (r.id === id ? { ...r, status: 'completed' } : r))
-        );
-        setUploaded((prev) => new Set([...prev, id]));
-        setUploading(null);
-
-        // Notify Doctor
-        addNotification({
-            targetUserRole: 'doctor',
-            type: 'Lab Report Uploaded',
-            message: `Lab uploaded results for ${req.test} (${req.patient}).`,
-            sender: 'Lab System'
-        });
-
-        // Notify Nurse
-        addNotification({
-            targetUserRole: 'nurse',
-            type: 'Lab Report Uploaded',
-            message: `Lab uploaded results for ${req.test} (${req.patient}).`,
-            sender: 'Lab System'
-        });
-
-        // Notify Patient
-        addNotification({
-            targetUserRole: 'patient',
-            type: 'New Lab Report',
-            message: `Your lab results for ${req.test} are now available.`,
-            sender: 'Lab System'
-        });
+            // Notify parties
+            addNotification({ targetUserRole: 'doctor', type: 'Lab Report Uploaded', message: `Lab uploaded results for ${req.test} (${req.patient}).`, sender: 'Lab System' });
+            addNotification({ targetUserRole: 'nurse', type: 'Lab Report Uploaded', message: `Lab uploaded results for ${req.test} (${req.patient}).`, sender: 'Lab System' });
+            addNotification({ targetUserRole: 'patient', type: 'New Lab Report', message: `Your lab results for ${req.test} are now available.`, sender: 'Lab System' });
+        } catch (err) {
+            console.error('Failed to upload lab result:', err);
+            alert('Failed to upload lab result. See console for details.');
+        } finally {
+            setUploaded((prev) => new Set([...prev, id]));
+            setUploading(null);
+        }
     };
 
     return (
