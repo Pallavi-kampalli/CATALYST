@@ -6,6 +6,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import PatientApp from './pages/PatientApp';
+import PatientOnboarding from './pages/PatientOnboarding';
 import Dashboard from './pages/Dashboard';
 import NurseDashboard from './pages/NurseDashboard';
 import LabDashboard from './pages/LabDashboard';
@@ -30,6 +31,14 @@ export default function App() {
             <Route path="/login" element={<Login />} />
 
             {/* Patient app — patients only */}
+            <Route
+              path="/patient-onboarding"
+              element={
+                <ProtectedRoute allowedRoles={['patient']}>
+                  <PatientOnboarding />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/patient-dashboard"
               element={

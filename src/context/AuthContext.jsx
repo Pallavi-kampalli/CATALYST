@@ -93,12 +93,17 @@ export function AuthProvider({ children }) {
         try {
             const result = await createUserWithEmailAndPassword(auth, email, password);
             // Create Firestore user document
-            await setDoc(doc(db, 'users', result.user.uid), {
+            const userData = {
+                uid: result.user.uid,
                 name,
+                email,
                 role,
+                assignedPatients: [],
+                assignedUnder: null,
                 createdAt: new Date().toISOString()
-            });
-            return { success: true, user: result.user };
+            };
+            await setDoc(doc(db, 'users', result.user.uid), userData);
+            return { success: true, user: userData };
         } catch (error) {
             return { success: false, error: error.message };
         }
