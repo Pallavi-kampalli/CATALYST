@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { db } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
 
 // ─── Static Patient Data ───────────────────────────────────────────────────────
 const PATIENT_DATA = {
@@ -136,16 +134,6 @@ export default function PatientApp() {
     const { user, logout } = useAuth();
     const { addNotification, getNotifications, getUnreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [activePage, setActivePage] = useState('home');
-    const [patient, setPatient] = useState(null);
-    useEffect(() => {
-        if (!user?.uid) return;
-        const pRef = doc(db, 'patients', user.uid);
-        const unsub = onSnapshot(pRef, (snap) => {
-            if (snap.exists()) setPatient({ id: snap.id, ...snap.data() });
-            else setPatient(null);
-        }, (err) => console.error('Patient snapshot error', err));
-        return () => unsub();
-    }, [user]);
     const [chatHistory, setChatHistory] = useState(() => {
         const stored = loadChatHistory();
         if (stored.length === 0) {
@@ -178,10 +166,10 @@ export default function PatientApp() {
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const fileInputRef = useRef();
 
-    const p = patient || PATIENT_DATA;
-    const recoveryRate = p.totalDays ? Math.round((p.daysSinceDischarge / p.totalDays) * 100) : 0;
-    const sugarColor = (p.sugarLevel || 0) > 160 ? 'red' : (p.sugarLevel || 0) > 120 ? 'yellow' : 'green';
-    const bpSys = p.bp ? parseInt((p.bp || '').split('/')[0] || '0') : 0;
+    const p = PATIENT_DATA;
+    const recoveryRate = Math.round((p.daysSinceDischarge / p.totalDays) * 100);
+    const sugarColor = p.sugarLevel > 160 ? 'red' : p.sugarLevel > 120 ? 'yellow' : 'green';
+    const bpSys = parseInt(p.bp.split('/')[0]);
     const bpColor = bpSys > 139 ? 'red' : bpSys > 129 ? 'yellow' : 'green';
 
     const sendMessage = (text) => {

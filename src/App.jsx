@@ -16,9 +16,7 @@ import LabDashboard from './pages/LabDashboard';
  * unauthenticated users to /login.
  */
 function RootRedirect() {
-  const { user, checkAuth, loading } = useAuth();
-  // While auth is initializing, don't redirect — avoid flash/blank screens
-  if (loading) return null;
+  const { user, checkAuth } = useAuth();
   if (!checkAuth()) return <Navigate to="/login" replace />;
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
 }

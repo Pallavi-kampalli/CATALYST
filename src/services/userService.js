@@ -9,7 +9,6 @@ import {
     where,
     getDocs
 } from 'firebase/firestore';
-import { arrayUnion, arrayRemove } from 'firebase/firestore';
 
 /**
  * userService.js
@@ -127,48 +126,6 @@ export const userService = {
             return { success: true };
         } catch (error) {
             console.error('Error updating patient vitals:', error);
-            return { success: false, error: error.message };
-        }
-    }
-,
-
-    /**
-     * Assigns a patient to a nurse (called by Doctor).
-     * Updates patient.assignedNurseId and updates nurse.assignedPatients arrays.
-     * @param {string} patientId
-     * @param {string|null} newNurseId
-     * @param {string|null} prevNurseId
-     */
-    async assignPatientToNurse(patientId, newNurseId, prevNurseId = null) {
-        try {
-            const patientRef = doc(db, 'patients', patientId);
-            // Update patient doc
-            await updateDoc(patientRef, {
-                assignedNurseId: newNurseId || null,
-                updatedAt: new Date().toISOString()
-            });
-
-            // Add patient to new nurse's assignedPatients
-            if (newNurseId) {
-                const nurseRef = doc(db, 'users', newNurseId);
-                await updateDoc(nurseRef, {
-                    assignedPatients: arrayUnion(patientId),
-                    updatedAt: new Date().toISOString()
-                });
-            }
-
-            // Remove patient from previous nurse if different
-            if (prevNurseId && prevNurseId !== newNurseId) {
-                const prevRef = doc(db, 'users', prevNurseId);
-                await updateDoc(prevRef, {
-                    assignedPatients: arrayRemove(patientId),
-                    updatedAt: new Date().toISOString()
-                });
-            }
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error assigning patient to nurse:', error);
             return { success: false, error: error.message };
         }
     }

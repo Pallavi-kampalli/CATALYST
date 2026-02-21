@@ -1,11 +1,8 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { engineerFeatures } from '../ml/features';
 import { predictSync } from '../ml/model';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { db } from '../firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { userService } from '../services/userService';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const noise = () => (Math.random() - 0.5) * 1.5;
@@ -267,27 +264,6 @@ export default function Dashboard() {
     const [expandedId, setExpandedId] = useState(null);
     const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
     const [pendingAssign, setPendingAssign] = useState({});
-    // Real-time data from Firestore (falls back to mock data below)
-    const [patients, setPatients] = useState([]);
-    const [teamMembers, setTeamMembers] = useState([]);
-
-    useEffect(() => {
-        const col = collection(db, 'patients');
-        const unsub = onSnapshot(col, (snap) => {
-            const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            setPatients(arr);
-        }, (err) => console.error('Patients snapshot error', err));
-        return () => unsub();
-    }, []);
-
-    useEffect(() => {
-        const col = collection(db, 'users');
-        const unsub = onSnapshot(col, (snap) => {
-            const arr = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-            setTeamMembers(arr);
-        }, (err) => console.error('Users snapshot error', err));
-        return () => unsub();
-    }, []);
 
     // Per-patient mutable state: appointments, medications, med last-updated
     const [apptState, setApptState] = useState(() =>
@@ -299,14 +275,12 @@ export default function Dashboard() {
     const [medUpdatedAt, setMedUpdatedAt] = useState({});
 
     const isDoctor = user?.role === 'doctor';
-    const TEAM_MEMBERS_SOURCE = teamMembers.length ? teamMembers : TEAM_MEMBERS;
-    const ALL_PATIENTS_SOURCE = patients.length ? patients : ALL_PATIENTS;
-    const nurses = TEAM_MEMBERS_SOURCE.filter(m => m.role === 'nurse');
-    const interns = TEAM_MEMBERS_SOURCE.filter(m => m.role === 'intern');
+    const nurses = TEAM_MEMBERS.filter(m => m.role === 'nurse');
+    const interns = TEAM_MEMBERS.filter(m => m.role === 'intern');
 
-    const high = useMemo(() => ALL_PATIENTS_SOURCE.filter(p => p.riskClass === 'high'), [ALL_PATIENTS_SOURCE]);
-    const moderate = useMemo(() => ALL_PATIENTS_SOURCE.filter(p => p.riskClass === 'moderate'), [ALL_PATIENTS_SOURCE]);
-    const stable = useMemo(() => ALL_PATIENTS_SOURCE.filter(p => p.riskClass !== 'high' && p.riskClass !== 'moderate'), [ALL_PATIENTS_SOURCE]);
+    const high = useMemo(() => ALL_PATIENTS.filter(p => p.riskClass === 'high'), []);
+    const moderate = useMemo(() => ALL_PATIENTS.filter(p => p.riskClass === 'moderate'), []);
+    const stable = useMemo(() => ALL_PATIENTS.filter(p => p.riskClass !== 'high' && p.riskClass !== 'moderate'), []);
 
     const toggleExpand = useCallback((id) => {
         setExpandedId(prev => prev === id ? null : id);
@@ -374,35 +348,16 @@ export default function Dashboard() {
     };
 
     // Assignment handlers
-    const handleAssignUpdate = async (patientId) => {
+    const handleAssignUpdate = (patientId) => {
         const pending = pendingAssign[patientId] || {};
-        const prev = assignments[patientId] || {};
-        const newNurse = 'nurse' in pending ? pending.nurse : prev.nurse ?? null;
-        const newIntern = 'intern' in pending ? pending.intern : prev.intern ?? null;
-
-        // Optimistic local update
-        setAssignments(prevAll => ({
-            ...prevAll,
+        setAssignments(prev => ({
+            ...prev,
             [patientId]: {
-                nurse: newNurse,
-                intern: newIntern
+                nurse: 'nurse' in pending ? pending.nurse : prev[patientId]?.nurse ?? null,
+                intern: 'intern' in pending ? pending.intern : prev[patientId]?.intern ?? null,
             }
         }));
         setPendingAssign(prev => { const n = { ...prev }; delete n[patientId]; return n; });
-
-        // Persist assignment to Firestore (update patient and nurse docs)
-        try {
-            const res = await userService.assignPatientToNurse(patientId, newNurse, prev.nurse || null);
-            if (!res.success) {
-                // Revert on failure
-                setAssignments(prevAll => ({ ...prevAll, [patientId]: prev }));
-                alert('Failed to save assignment: ' + (res.error || 'Unknown error'));
-            }
-        } catch (err) {
-            console.error('Assignment error', err);
-            setAssignments(prevAll => ({ ...prevAll, [patientId]: prev }));
-            alert('Failed to save assignment. See console for details.');
-        }
     };
 
     const setPendingField = (patientId, field, value) => {
@@ -421,8 +376,8 @@ export default function Dashboard() {
         return c;
     }, [assignments]);
 
-    const assigned = ALL_PATIENTS_SOURCE.filter(p => assignments[p.id]?.nurse || assignments[p.id]?.intern);
-    const unassigned = ALL_PATIENTS_SOURCE.filter(p => !assignments[p.id]?.nurse && !assignments[p.id]?.intern);
+    const assigned = ALL_PATIENTS.filter(p => assignments[p.id]?.nurse || assignments[p.id]?.intern);
+    const unassigned = ALL_PATIENTS.filter(p => !assignments[p.id]?.nurse && !assignments[p.id]?.intern);
 
     const detailProps = { apptState, medState, medUpdatedAt, handleApptAction, handleAddMed, handleEditMed, handleRemoveMed, nurses, interns };
 

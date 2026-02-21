@@ -1,10 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { engineerFeatures } from '../ml/features';
 import { predictSync } from '../ml/model';
-import { db } from '../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const noise = () => (Math.random() - 0.5) * 1.5;
@@ -176,24 +174,8 @@ export default function NurseDashboard() {
     const [messagesState, setMessagesState] = useState({});
     const [scheduledAppts, setScheduledAppts] = useState({});
 
-    const [patients, setPatients] = useState([]);
-
-    useEffect(() => {
-        const col = collection(db, 'patients');
-        const unsub = onSnapshot(col, (snap) => {
-            const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            setPatients(arr);
-        }, (err) => console.error('Patients snapshot error', err));
-        return () => unsub();
-    }, []);
-
-    const myPatients = useMemo(() => {
-        if (patients.length > 0) {
-            return patients.filter(p => p.assignedNurseId === user?.uid || p.assignedInternId === user?.uid);
-        }
-        const assignedIds = isIntern ? INTERN_PATIENT_IDS : NURSE_PATIENT_IDS;
-        return ALL_PATIENTS.filter(p => assignedIds.includes(p.id));
-    }, [patients, isIntern, user]);
+    const assignedIds = isIntern ? INTERN_PATIENT_IDS : NURSE_PATIENT_IDS;
+    const myPatients = useMemo(() => ALL_PATIENTS.filter(p => assignedIds.includes(p.id)), [isIntern]);
 
     const addNote = (patientId, text) => {
         if (!text.trim()) return;
